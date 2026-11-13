@@ -66,6 +66,14 @@ def analyze(records, params):
     high_noise = int(np.sum(noise & (severity >= 4)))
     if noise_count:
         rows.append({"band": "孤立/稀疏点", "count": noise_count, "from_km": round(float(mileage[noise].min()), 4), "to_km": round(float(mileage[noise].max()), 4), "span_m": "—", "max_severity": int(severity[noise].max()), "mean_lateral": round(float(lateral[noise].mean()), 2), "review": "逐点复核，不连成区段"})
+    # 逐点归属：缺陷编号是跨参数试验唯一稳定的身份，用于两次试验的逐点对比。
+    points = []
+    for row_index, record in enumerate(records):
+        cluster = int(labels[row_index])
+        points.append({"defect_id": str(record.get("defect_id", "")).strip(),
+                       "mileage_km": round(float(mileage[row_index]), 4),
+                       "severity": int(severity[row_index]),
+                       "band": "孤立/稀疏点" if cluster < 0 else f"缺陷带{clusters.index(cluster) + 1}"})
     return {
         "summary": f"在{len(records)}个缺陷点中识别{len(clusters)}条密集带，保留{noise_count}个孤立/稀疏点；邻域半径{eps:g}米。",
         "metrics": [{"label": "密集缺陷带", "value": len(clusters), "unit": "条"}, {"label": "密集带内点数", "value": int((labels >= 0).sum())}, {"label": "噪声占比", "value": round(noise_count / len(records) * 100, 2), "unit": "%"}, {"label": "孤立高等级点", "value": high_noise}],
@@ -73,4 +81,5 @@ def analyze(records, params):
         "chart": {"type": "bar", "labels": [row["band"] for row in rows], "series": [{"name": "缺陷点数", "values": [row["count"] for row in rows]}]},
         "findings": [f"孤立点中有{high_noise}个等级≥4的缺陷，不能因为被标为噪声而忽略。", "收紧邻域半径会使密度带分裂或增加噪声；扩大半径可能把相邻问题连接。", "缺陷带按起始里程排序，标签仅用于定位，不表示处理优先级。"],
         "method": metadata()["method"], "warnings": ["噪声仅指不满足当前密度条件，不代表无效数据或低风险。"] + (["当前参数未识别出密集带，可核查数据范围或适度增大半径。"] if not clusters else []),
+        "points": points,
     }
